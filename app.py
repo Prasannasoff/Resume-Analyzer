@@ -1,4 +1,6 @@
 from dotenv import load_dotenv
+
+load_dotenv()
 import base64
 import streamlit as st
 import os
@@ -6,129 +8,120 @@ import io
 from PIL import Image 
 import pdf2image
 import google.generativeai as genai
-
-# Load environment variables
-load_dotenv()
-
-# Configure the Google Gemini API key
+import fitz  # PyMuPDF
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-def get_gemini_response(input, pdf_content, prompt):
+def get_gemini_response(prompt, extracted_text):
     model = genai.GenerativeModel('gemini-1.5-flash')
-    response = model.generate_content([input, pdf_content[0], prompt])
-    
-    # Extract primary and secondary skills from the AI response
-    primary_skills, secondary_skills = extract_skills_from_response(response.text)
-    return primary_skills, secondary_skills
+    # Combine prompt and extracted text as input for the model
+    combined_input = f"{prompt}\n\n{extracted_text}"
+    response = model.generate_content([combined_input])
+    return response.text
 
-def extract_skills_from_response(response_text):
-    primary_skills = []
-    secondary_skills = []
+def get_gemini_response2(prompt2, input_text):
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    # Combine prompt and extracted text as input for the model
+    combined_input = f"{prompt2}\n\n{input_text}"
+    response = model.generate_content([combined_input])
+    return response.text
 
-    # Example extraction logic based on response text formatting
-    primary_flag = False
-    secondary_flag = False
-    
-    for line in response_text.splitlines():
-        if "Primary Skills" in line:
-            primary_flag = True
-            secondary_flag = False
-            continue
-        elif "Secondary Skills" in line:
-            primary_flag = False
-            secondary_flag = True
-            continue
-        
-        if primary_flag and line.strip():
-            primary_skills.append(line.strip())
-        elif secondary_flag and line.strip():
-            secondary_skills.append(line.strip())
-    
-    return primary_skills, secondary_skills
 
-def calculate_percentage(primary_skills, secondary_skills):
-    # Assume each missing primary skill reduces percentage by 10%
-    # and each missing secondary skill reduces it by 5%
-    base_percentage = 100
-    primary_skill_weight = 10
-    secondary_skill_weight = 5
-    
-    percentage = base_percentage - (len(primary_skills) * primary_skill_weight) - (len(secondary_skills) * secondary_skill_weight)
-    
-    return max(0, percentage)  # Ensure percentage doesn't go below 0
-
-def input_pdf_setup(uploaded_file):
-    if uploaded_file is not None:
-        # Specify the path to the Poppler binaries
-        poppler_path = r'C:\Program Files (x86)\poppler\Library\bin'
-        
-        # Convert the PDF to images
-        images = pdf2image.convert_from_bytes(
-            uploaded_file.read(),
-            poppler_path=poppler_path
-        )
-
-        first_page = images[0]
-
-        # Convert to bytes
-        img_byte_arr = io.BytesIO()
-        first_page.save(img_byte_arr, format='JPEG')
-        img_byte_arr = img_byte_arr.getvalue()
-
-        pdf_parts = [
-            {
-                "mime_type": "image/jpeg",
-                "data": base64.b64encode(img_byte_arr).decode()  # encode to base64
-            }
-        ]
-        return pdf_parts
-    else:
-        raise FileNotFoundError("No file uploaded")
 
 ## Streamlit App
 
-st.set_page_config(page_title="ATS Resume Expert")
+st.set_page_config(page_title="ATS Resume EXpert")
 st.header("ATS Tracking System")
-input_text = st.text_area("Job Description: ", key="input")
-uploaded_file = st.file_uploader("Upload your resume (PDF)...", type=["pdf"])
+input_text=st.text_area("Job Description: ",key="input")
+uploaded_file=st.file_uploader("Upload your resume(PDF)...",type=["pdf"])
+
+
 
 if uploaded_file is not None:
     st.write("PDF Uploaded Successfully")
 
-submit1 = st.button("Tell Me About the Resume")
+def extract_text_from_pdf(pdf_file):
+    # Open the PDF
+    pdf_document = fitz.open(stream=pdf_file.read(), filetype="pdf")
+    
+    text = ""
+    
+    # Iterate through pages and extract text
+    for page_num in range(len(pdf_document)):
+        page = pdf_document.load_page(page_num)
+        text += page.get_text()
+
+    return text
+
+def calculate_skill_match(job_skills, resume_skills):
+    job_skills_set = set(skill.strip().lower() for skill in job_skills)
+    resume_skills_set = set(skill.strip().lower() for skill in resume_skills)
+    
+    matching_skills = job_skills_set.intersection(resume_skills_set)
+    total_skills = len(job_skills_set)
+   
+    if total_skills == 0:
+        return 0, matching_skills
+    
+    match_percentage = (len(matching_skills) / total_skills) * 100
+    return match_percentage, matching_skills
+
+
+
+if uploaded_file is not None:
+    
+    
+    # Extract text from the uploaded PDF
+    extracted_text = extract_text_from_pdf(uploaded_file)
+    
+    # Display extracted text
+    st.subheader("Extracted Text")
+    st.text_area("Resume Content:", value=extracted_text, height=300)
+
+
+
+#submit2 = st.button("How Can I Improvise my Skills")
+
 submit3 = st.button("Percentage match")
 
+
+
 input_prompt1 = """
-You are an experienced Technical Human Resource Manager, your task is to review the provided resume against the job description. 
-Please share your professional evaluation on whether the candidate's profile aligns with the role. 
-Highlight the strengths and weaknesses of the applicant in relation to the specified job requirements.
+Get the skills mentioned in this job description. Don't add extra contents
 """
-
 input_prompt3 = """
-You are a skilled ATS (Applicant Tracking System) scanner with a deep understanding of data science and ATS functionality. 
-Your task is to evaluate the resume against the provided job description. 
-Please categorize the missing skills into "Primary Skills" (such as HTML, CSS, JS, MERN, etc.) and "Secondary Skills" (such as DevOps, GitHub, etc.). 
-Based on these categories, list the missing skills separately and do not calculate the percentage match.
+Get the skills mentioned in my resume. Put all the frameworks and technical skills in a single list. Don't add extra contents
 """
 
-if submit1:
+
+
+if submit3:
     if uploaded_file is not None:
-        pdf_content = input_pdf_setup(uploaded_file)
-        primary_skills, secondary_skills = get_gemini_response(input_prompt1, pdf_content, input_text)
-        st.subheader("Missing Skills")
-        st.write("Primary Skills: ", primary_skills)
-        st.write("Secondary Skills: ", secondary_skills)
+        # Get the skills listed in the resume
+        resume_skills_text = get_gemini_response(input_prompt3, extracted_text)
+        job_skills_text = get_gemini_response2(input_prompt1, input_text)
+
+        resume_skills = [skill.strip() for skill in resume_skills_text.split('\n') if skill.strip()]
+        
+        # Extract skills from the job description
+        job_skills = [skill.strip() for skill in job_skills_text.split('\n') if skill.strip()]
+        
+        # Calculate match percentage
+        match_percentage, matching_skills = calculate_skill_match(job_skills, resume_skills)
+        
+        st.subheader("Yout Skills:")
+        st.write(resume_skills)
+        st.subheader("Job requirement Skills:")
+
+        st.write(job_skills)
+
+        st.subheader("Match Percentage:")
+        st.write(f"{int(match_percentage)}%")
+        st.write(matching_skills)
+
     else:
         st.write("Please upload the resume")
 
-elif submit3:
-    if uploaded_file is not None:
-        pdf_content = input_pdf_setup(uploaded_file)
-        primary_skills, secondary_skills = get_gemini_response(input_prompt3, pdf_content, input_text)
-        percentage = calculate_percentage(primary_skills, secondary_skills)
-        st.subheader("Percentage Match")
-        st.write(f"Match Percentage: {percentage}%")
-        st.write("Primary Skills: ", primary_skills)
-        st.write("Secondary Skills: ", secondary_skills)
-    else:
-        st.write("Please upload the resume")
+
+
+
+
