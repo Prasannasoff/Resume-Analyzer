@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume Analysis Results</title>
+</head>
+
+<body>
+    <h1>Resume Analysis Results</h1>
+    <h2>Extracted Skills:</h2>
+    <ul>
+        {% for skill in skills %}
+        <li>{{ skill }}</li>
+        {% endfor %}
+    </ul>
+    <h2>Extracted Domain:</h2>
+    <p>{{ domain }}</p>
+    <h2>Mapped Domain:</h2>
+    <p>{{ mapped_domain }}</p>
+    <h2>Matched Skills:</h2>
+    <ul>
+        {% for skill in matched_skills %}
+        <li>{{ skill }}</li>
+        {% endfor %}
+    </ul>
+    <h2>Match Percentage:</h2>
+    <p>{{ match_percentage }}%</p>
+    <a href="/">Upload another resume</a>
+</body>
+
+</html>
